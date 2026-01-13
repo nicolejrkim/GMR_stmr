@@ -20,12 +20,13 @@ def batch_retarget_lafan1():
     
     # Select some interesting motions
     test_motions = [
-        "dance1_subject1.bvh",
-        "dance2_subject1.bvh", 
-        "walk1_subject1.bvh",
-        "run1_subject2.bvh",
-        "jumps1_subject1.bvh"
-        "fight1_subject2.bvh"
+        # "dance1_subject1.bvh",
+        # "dance2_subject1.bvh", 
+        # "walk1_subject1.bvh",
+        # "run1_subject2.bvh",
+        # "jumps1_subject1.bvh",
+        # "fight1_subject2.bvh"
+        "fallAndGetUp2_subject2.bvh"
     ]
     
     # Test robots that support LAFAN1 (from README table)
