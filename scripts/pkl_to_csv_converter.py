@@ -1,10 +1,44 @@
 #!/usr/bin/env python3
 
+"""pkl_to_csv_converter.py
+
+Converts GMR motion .pkl files (containing `qpos` and optional `fps`) into a
+CSV layout compatible with downstream replay scripts:
+
+- Per-row layout: `qpos(36) + qvel(35) = 71 columns`
+    - qpos: root_pos(3) + root_quat_wxyz(4) + joint_q(29)
+    - qvel: root_vel(3) + root_ang_vel(3) + joint_qd(29)
+
+Quick usage:
+
+Batch convert a directory of .pkl files (default paths):
+    python scripts/pkl_to_csv_converter.py --input-dir gmr_output/lafan1 --output-dir gmr_output/lafan1/csv
+
+Convert a single file:
+    python scripts/pkl_to_csv_converter.py --pkl-file gmr_output/lafan1/foo.pkl --output-dir gmr_output/lafan1/csv
+
+Resample to a different FPS:
+    python scripts/pkl_to_csv_converter.py --pkl-file foo.pkl --fps 100
+
+Slice a frame range (inclusive, in ORIGINAL frames, before resampling):
+    python scripts/pkl_to_csv_converter.py --pkl-file foo.pkl --start-frame 100 --end-frame 400
+
+Notes:
+- If you pass --start-frame/--end-frame, the script writes a commented metadata
+    header by default (same as passing --write-metadata).
+"""
+
 import os
 import sys
 import pickle
 import numpy as np
 from pathlib import Path
+import argparse
+
+
+def _load_motion_pkl(pkl_path):
+    with open(pkl_path, 'rb') as f:
+        return pickle.load(f)
 
 def quat_to_angular_velocity(quat_prev, quat_curr, dt):
     """
@@ -116,7 +150,31 @@ def compute_velocities(qpos_data, dt):
     
     return qvel_data
 
-def pkl_to_csv(pkl_path, csv_path, target_fps=50):
+def _clamp_frame_range(num_frames, start_frame=None, end_frame=None):
+    if start_frame is None:
+        start_frame = 0
+    if end_frame is None:
+        end_frame = num_frames - 1
+
+    start_frame = int(start_frame)
+    end_frame = int(end_frame)
+
+    if start_frame < 0:
+        start_frame = 0
+    if end_frame < 0:
+        end_frame = num_frames - 1
+
+    if start_frame >= num_frames:
+        raise ValueError(f"start_frame ({start_frame}) must be < num_frames ({num_frames})")
+    if end_frame >= num_frames:
+        end_frame = num_frames - 1
+    if end_frame < start_frame:
+        raise ValueError(f"end_frame ({end_frame}) must be >= start_frame ({start_frame})")
+
+    return start_frame, end_frame
+
+
+def pkl_to_csv(pkl_path, csv_path, target_fps=50, start_frame=None, end_frame=None, write_metadata=False, data=None):
     """
     Convert pkl motion data to CSV format
     
@@ -124,15 +182,33 @@ def pkl_to_csv(pkl_path, csv_path, target_fps=50):
         pkl_path: Path to input pkl file
         csv_path: Path to output CSV file
         target_fps: Target frame rate for output (default 50Hz)
+        start_frame: Optional start frame index (inclusive) in the original sequence
+        end_frame: Optional end frame index (inclusive) in the original sequence
+        write_metadata: If True, writes frame-range metadata as commented header lines
     """
     # Load pkl data
-    with open(pkl_path, 'rb') as f:
-        data = pickle.load(f)
+    if data is None:
+        data = _load_motion_pkl(pkl_path)
     
     qpos_list = data['qpos']
     original_fps = data.get('fps', 50)
     
     print(f"  📊 Loaded {len(qpos_list)} frames at {original_fps} FPS")
+
+    # Frame slicing (in original frame indices, before resampling)
+    original_num_frames = len(qpos_list)
+    if start_frame is not None or end_frame is not None:
+        start_frame_i, end_frame_i = _clamp_frame_range(original_num_frames, start_frame, end_frame)
+        qpos_list = qpos_list[start_frame_i:end_frame_i + 1]
+        print(
+            f"  ✂️  Using frames {start_frame_i}..{end_frame_i} (inclusive) "
+            f"-> {len(qpos_list)} frames"
+        )
+    else:
+        start_frame_i, end_frame_i = 0, original_num_frames - 1
+
+    if len(qpos_list) < 2:
+        raise ValueError(f"Need at least 2 frames after slicing (got {len(qpos_list)})")
     
     # Resample if needed
     if original_fps != target_fps:
@@ -194,17 +270,32 @@ def pkl_to_csv(pkl_path, csv_path, target_fps=50):
     if csv_array.shape[1] != expected_width:
         raise ValueError(f"CSV must have {expected_width} columns (got {csv_array.shape[1]})")
     
-    # Save without headers, proper precision for float32
-    np.savetxt(csv_path, csv_array, delimiter=',', fmt='%.6f')
+    # Save, optionally with commented metadata header lines.
+    header = ""
+    if write_metadata:
+        header_lines = [
+            f"source_pkl={Path(pkl_path).name}",
+            f"original_fps={original_fps}",
+            f"target_fps={target_fps}",
+            f"original_total_frames={original_num_frames}",
+            f"selected_start_frame={start_frame_i}",
+            f"selected_end_frame={end_frame_i}",
+            f"selected_frames={len(qpos_list)}",
+            f"columns={csv_array.shape[1]}",
+        ]
+        header = "\n".join(header_lines)
+
+    # Proper precision for float32
+    np.savetxt(csv_path, csv_array, delimiter=',', fmt='%.6f', header=header, comments='# ')
     
     print(f"  ✅ Saved {len(csv_data)} frames to {csv_path}")
     return len(csv_data)
 
-def batch_convert_pkl_to_csv():
-    """Convert all pkl files in gmr_output to CSV format"""
-    
-    input_dir = Path("/home/jaeryeong/GMR/gmr_output/lafan1")
-    output_dir = Path("/home/jaeryeong/GMR/gmr_output/lafan1/csv")
+def batch_convert_pkl_to_csv(input_dir, output_dir, target_fps=50, start_frame=None, end_frame=None, write_metadata=False):
+    """Convert all pkl files in a directory to CSV format"""
+
+    input_dir = Path(input_dir)
+    output_dir = Path(output_dir)
     output_dir.mkdir(exist_ok=True)
     
     pkl_files = list(input_dir.glob("*.pkl"))
@@ -222,12 +313,29 @@ def batch_convert_pkl_to_csv():
     for pkl_path in sorted(pkl_files):
         print(f"\n📁 Processing: {pkl_path.name}")
         
-        # Generate CSV filename
-        csv_name = pkl_path.name.replace('.pkl', '.csv')
-        csv_path = output_dir / csv_name
-        
         try:
-            frame_count = pkl_to_csv(pkl_path, csv_path, target_fps=50)
+            data = _load_motion_pkl(pkl_path)
+            qpos_list = data['qpos']
+            original_num_frames = len(qpos_list)
+
+            # Generate CSV filename (include slicing info if provided)
+            if start_frame is not None or end_frame is not None:
+                start_frame_i, end_frame_i = _clamp_frame_range(original_num_frames, start_frame, end_frame)
+                csv_name = f"{pkl_path.stem}_start_{start_frame_i}_end_{end_frame_i}.csv"
+            else:
+                csv_name = pkl_path.name.replace('.pkl', '.csv')
+
+            csv_path = output_dir / csv_name
+
+            frame_count = pkl_to_csv(
+                pkl_path,
+                csv_path,
+                target_fps=target_fps,
+                start_frame=start_frame,
+                end_frame=end_frame,
+                write_metadata=write_metadata,
+                data=data,
+            )
             total_frames += frame_count
             converted_files += 1
             
@@ -247,5 +355,142 @@ def batch_convert_pkl_to_csv():
         file_size_mb = csv_file.stat().st_size / (1024 * 1024)
         print(f"  💾 {csv_file.name} ({file_size_mb:.1f} MB)")
 
+
+def convert_single_pkl_to_csv(pkl_file, csv_out=None, output_dir=None, target_fps=50, start_frame=None, end_frame=None, write_metadata=False):
+    """Convert a single pkl file to CSV format."""
+
+    pkl_path = Path(pkl_file)
+    if not pkl_path.exists():
+        raise FileNotFoundError(f"PKL file not found: {pkl_path}")
+
+    data = _load_motion_pkl(pkl_path)
+    original_num_frames = len(data['qpos'])
+
+    if csv_out is not None:
+        csv_path = Path(csv_out)
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        out_dir = Path(output_dir) if output_dir is not None else pkl_path.parent
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        if start_frame is not None or end_frame is not None:
+            start_frame_i, end_frame_i = _clamp_frame_range(original_num_frames, start_frame, end_frame)
+            csv_name = f"{pkl_path.stem}_start_{start_frame_i}_end_{end_frame_i}.csv"
+        else:
+            csv_name = pkl_path.name.replace('.pkl', '.csv')
+
+        csv_path = out_dir / csv_name
+
+    print(f"\n📁 Processing single file: {pkl_path.name}")
+    pkl_to_csv(
+        pkl_path,
+        csv_path,
+        target_fps=target_fps,
+        start_frame=start_frame,
+        end_frame=end_frame,
+        write_metadata=write_metadata,
+        data=data,
+    )
+    return csv_path
+
+
+def _parse_args(argv):
+    parser = argparse.ArgumentParser(
+        description="Convert GMR .pkl motion files (qpos/fps) to CSV (qpos+qvel).",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  # Batch convert all .pkl under a directory\n"
+            "  python scripts/pkl_to_csv_converter.py --input-dir gmr_output/lafan1 --output-dir gmr_output/lafan1/csv\n\n"
+            "  # Convert a single file\n"
+            "  python scripts/pkl_to_csv_converter.py --pkl-file gmr_output/lafan1/foo.pkl --output-dir gmr_output/lafan1/csv\n\n"
+            "  # Resample to a different FPS\n"
+            "  python scripts/pkl_to_csv_converter.py --pkl-file foo.pkl --fps 100\n\n"
+            "  # Slice frames (inclusive, in original indices)\n"
+            "  python scripts/pkl_to_csv_converter.py --pkl-file foo.pkl --start-frame 100 --end-frame 400\n\n"
+            "Notes:\n"
+            "  - Output CSV has 71 columns: qpos(36) + qvel(35).\n"
+            "  - If --start-frame/--end-frame is provided, metadata header is written by default\n"
+            "    (equivalent to passing --write-metadata).\n"
+        ),
+    )
+
+    input_group = parser.add_mutually_exclusive_group()
+    input_group.add_argument(
+        "--pkl-file",
+        type=str,
+        default=None,
+        help="Convert a single .pkl file",
+    )
+    input_group.add_argument(
+        "--input-dir",
+        type=str,
+        default="/home/jaeryeong/GMR/gmr_output/lafan1",
+        help="Directory containing .pkl files (batch mode)",
+    )
+
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="/home/jaeryeong/GMR/gmr_output/lafan1/csv",
+        help="Directory to write .csv files (batch mode, or single-file default)",
+    )
+    parser.add_argument(
+        "--csv-out",
+        type=str,
+        default=None,
+        help="Output CSV path (single-file mode only)",
+    )
+    parser.add_argument(
+        "--fps",
+        type=float,
+        default=50,
+        help="Target FPS for output CSV (default: 50)",
+    )
+    parser.add_argument(
+        "--start-frame",
+        type=int,
+        default=None,
+        help="Start frame index (inclusive) in the original sequence",
+    )
+    parser.add_argument(
+        "--end-frame",
+        type=int,
+        default=None,
+        help="End frame index (inclusive) in the original sequence",
+    )
+    parser.add_argument(
+        "--write-metadata",
+        action="store_true",
+        help="Write frame-range metadata as commented header lines in CSV",
+    )
+
+    return parser.parse_args(argv)
+
 if __name__ == "__main__":
-    batch_convert_pkl_to_csv()
+    args = _parse_args(sys.argv[1:])
+    # If user is slicing, default to writing metadata unless explicitly disabled.
+    write_metadata = args.write_metadata or (args.start_frame is not None or args.end_frame is not None)
+
+    if args.pkl_file is not None:
+        if args.csv_out is not None and args.output_dir is not None:
+            # output_dir is ignored when csv_out is explicitly provided.
+            pass
+        convert_single_pkl_to_csv(
+            pkl_file=args.pkl_file,
+            csv_out=args.csv_out,
+            output_dir=args.output_dir,
+            target_fps=args.fps,
+            start_frame=args.start_frame,
+            end_frame=args.end_frame,
+            write_metadata=write_metadata,
+        )
+    else:
+        batch_convert_pkl_to_csv(
+            input_dir=args.input_dir,
+            output_dir=args.output_dir,
+            target_fps=args.fps,
+            start_frame=args.start_frame,
+            end_frame=args.end_frame,
+            write_metadata=write_metadata,
+        )
