@@ -191,7 +191,7 @@ def pkl_to_csv(pkl_path, csv_path, target_fps=50, start_frame=None, end_frame=No
         data = _load_motion_pkl(pkl_path)
     
     qpos_list = data['qpos']
-    original_fps = data.get('fps', 50)
+    original_fps = data.get('fps', 30)
     
     print(f"  📊 Loaded {len(qpos_list)} frames at {original_fps} FPS")
 

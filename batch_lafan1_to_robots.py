@@ -24,11 +24,19 @@ def batch_retarget_lafan1():
         # "dance2_subject1.bvh", 
         # "walk1_subject1.bvh",
         # "run1_subject2.bvh",
-        "jumps1_subject1.bvh",
-        "fight1_subject2.bvh",
-        "fallAndGetUp2_subject2.bvh",
-        "multipleActions1_subject1.bvh"
-        "obstacles1_subject1.bvh"
+        # "jumps1_subject1.bvh",
+        # "fight1_subject2.bvh",
+        # "fallAndGetUp2_subject2.bvh",
+        # "multipleActions1_subject1.bvh",
+        # "obstacles1_subject1.bvh",
+        # "aiming1_subject1.bvh",
+        # "ground1_subject1.bvh",
+        # "push1_subject2.bvh",
+        # "pushAndFall1_subject1.bvh",
+        # "pushAndStumble1_subject2.bvh",
+        "sprint1_subject2.bvh",
+        # "run2_subject1.bvh",
+        "fightAndSports1_subject1.bvh",
     ]
     
     # Test robots that support LAFAN1 (from README table)
@@ -79,7 +87,7 @@ def batch_retarget_lafan1():
                 
                 motion_data = {
                     'qpos': qpos_list,
-                    'fps': 50,
+                    'fps': 30,
                     'robot_type': robot_name,
                     'source_motion': str(bvh_path),
                     'human_height': actual_human_height,

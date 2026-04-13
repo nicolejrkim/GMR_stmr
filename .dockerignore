@@ -1,0 +1,39 @@
+# Git and metadata
+.git
+.gitignore
+.gitattributes
+
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+
+# Build artifacts
+build/
+dist/
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Repo-local logs and temp files
+*.log
+MUJOCO_LOG.TXT
+
+# Generated outputs and large local data
+gmr_output/
+motion_data/
+assets/body_models/
+assets/hard_motions/
+
+# Notebook checkpoints
+.ipynb_checkpoints/

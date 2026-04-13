@@ -342,6 +342,43 @@ python scripts/bvh_to_robot_dataset.py --src_folder <path_to_dir_of_bvh_data> --
 
 By default there is no visualization for batch retargeting.
 
+### LAFAN1 BVH → PKL → CSV Pipeline
+
+A quick end-to-end workflow for batch-converting LAFAN1 BVH files to CSV (qpos + qvel) for downstream replay scripts.
+
+**Step 1 — Generate PKL from BVH**
+
+Edit [batch_lafan1_to_robots.py](batch_lafan1_to_robots.py) to set:
+- `lafan1_dir` — path to your `.bvh` files (default: `motion_data/lafan1/`)
+- `test_motions` — uncomment the BVH filenames you want to process
+- `test_robots` — list of target robots (e.g. `"unitree_g1"`)
+
+```bash
+python batch_lafan1_to_robots.py
+```
+
+PKL files are saved to `gmr_output/lafan1/`.
+
+**Step 2 — Convert PKL to CSV**
+
+```bash
+# Single file
+python scripts/pkl_to_csv_converter.py \
+  --pkl-file gmr_output/lafan1/foo.pkl \
+  --output-dir gmr_output/lafan1/csv
+
+# Batch (whole directory)
+python scripts/pkl_to_csv_converter.py \
+  --input-dir gmr_output/lafan1 \
+  --output-dir gmr_output/lafan1/csv
+```
+
+Additional options: `--fps 100` (resample), `--start-frame N`, `--end-frame N` (slice), `--write-metadata` (add header).
+
+CSV format: 71 columns — `qpos(36)` + `qvel(35)`
+- `qpos`: `root_pos(3)` + `root_quat_wxyz(4)` + `joint_q(29)`
+- `qvel`: `root_vel(3)` + `root_ang_vel(3)` + `joint_qd(29)`
+
 ### Retargeting from FBX (OptiTrack) to Robot
 
 #### Offline FBX Files
