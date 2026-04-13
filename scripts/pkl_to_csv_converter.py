@@ -28,12 +28,16 @@ Notes:
     header by default (same as passing --write-metadata).
 """
 
-import os
 import sys
 import pickle
 import numpy as np
 from pathlib import Path
 import argparse
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_INPUT_DIR = PROJECT_ROOT / "gmr_output" / "lafan1"
+DEFAULT_OUTPUT_DIR = DEFAULT_INPUT_DIR / "csv"
 
 
 def _load_motion_pkl(pkl_path):
@@ -425,14 +429,14 @@ def _parse_args(argv):
     input_group.add_argument(
         "--input-dir",
         type=str,
-        default="/home/jaeryeong/GMR/gmr_output/lafan1",
+        default=str(DEFAULT_INPUT_DIR),
         help="Directory containing .pkl files (batch mode)",
     )
 
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="/home/jaeryeong/GMR/gmr_output/lafan1/csv",
+        default=str(DEFAULT_OUTPUT_DIR),
         help="Directory to write .csv files (batch mode, or single-file default)",
     )
     parser.add_argument(

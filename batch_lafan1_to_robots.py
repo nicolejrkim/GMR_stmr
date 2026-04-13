@@ -2,21 +2,29 @@
 
 import os
 import sys
-sys.path.insert(0, '/home/jaeryeong/GMR')
+from pathlib import Path
+
+# Add repository root to Python path for direct script execution.
+PROJECT_ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from general_motion_retargeting import GeneralMotionRetargeting as GMR
 from general_motion_retargeting.utils.lafan1 import load_bvh_file
 import numpy as np
 import pickle
-from pathlib import Path
 from tqdm import tqdm
 
 def batch_retarget_lafan1():
     """Process multiple LAFAN1 motions to different robots"""
     
-    lafan1_dir = Path("/home/jaeryeong/GMR/motion_data/lafan1")
-    output_dir = Path("/home/jaeryeong/GMR/gmr_output/lafan1")
-    output_dir.mkdir(exist_ok=True)
+    motion_data_root = PROJECT_ROOT / "motion_data"
+    lafan1_dir = motion_data_root / "lafan1"
+    if not lafan1_dir.exists():
+        # Fallback for setups where BVH files are directly under motion_data/.
+        lafan1_dir = motion_data_root
+
+    output_dir = PROJECT_ROOT / "gmr_output" / "lafan1"
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     # Select some interesting motions
     test_motions = [
